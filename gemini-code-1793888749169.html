@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Decision Analysis & Staged Filtering Tool</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Vue.js 3 CDN -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .fade-enter-active, .fade-leave-active { transition: opacity 0.3s ease; }
+        .fade-enter-from, .fade-leave-to { opacity: 0; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans min-p-6">
+    <div id="app" class="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
+        
+        <!-- Header -->
+        <header class="bg-white shadow-sm rounded-2xl p-6 mb-8 border border-slate-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div>
+                <span class="bg-indigo-100 text-indigo-700 text-xs font-semibold px-2.5 py-1 rounded-full uppercase tracking-wider">Decision Theory Suite</span>
+                <h1 class="text-3xl font-bold text-slate-900 mt-1">Interactive Decision Model & Staged Filtering</h1>
+                <p class="text-slate-600 text-sm mt-1">Analyze decision-making under uncertainty with Maximax, Maximin, Minimax Regret, EMV, and Staged Elimination.</p>
+            </div>
+            <div class="flex flex-wrap items-center gap-3">
+                <select v-model="selectedExampleKey" @change="loadExample" class="bg-slate-100 border border-slate-300 text-slate-700 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block p-2.5">
+                    <option value="" disabled>Load Preloaded Example...</option>
+                    <option v-for="(ex, key) in examples" :key="key" :value="key">{{ ex.name }}</option>
+                </select>
+                <button @click="resetData" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-4 py-2.5 rounded-lg text-sm font-medium transition">
+                    <i class="fa-solid fa-rotate-right mr-1"></i> Reset
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Grid Layout -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            
+            <!-- Left Column: Inputs & Payoff Matrix (Width 2/3) -->
+            <div class="lg:col-span-2 space-y-8">
+                
+                <!-- Section 1: Alternatives & States Manager -->
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+                    <h2 class="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2">
+                        <i class="fa-solid fa-sliders text-indigo-600"></i> Structure Setup
+                    </h2>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <!-- Alternatives Manager -->
+                        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                            <div class="flex justify-between items-center mb-3">
+                                <h3 class="font-semibold text-slate-800 text-sm uppercase tracking-wider">Alternatives (Options)</h3>
+                                <button @click="addAlternative" class="text-xs bg-indigo-600 hover:bg-indigo-700 text-white px-2.5 py-1.5 rounded-md font-medium transition">
+                                    <i class="fa-solid fa-plus mr-1"></i> Add
+                                </button>
+                            </div>
+                            <div class="space-y-2 max-h-48 overflow-y-auto pr-1">
+                                <div v-for="(alt, index) in alternatives" :key="index" class="flex items-center gap-2">
+                                    <input type="text" v-model="alternatives[index]" class="w-full bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                                    <button @click="removeAlternative(index)" :disabled="alternatives.length <= 2" class="text-slate-400 hover:text-red-600 disabled:opacity-30 p-1.5">
+                                        <i class="fa-solid fa-trash-can text-sm"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- States Manager -->
+                        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                            <div class="flex justify-between items-center mb-3">
+                                <h3 class="font-semibold text-slate-800 text-sm uppercase tracking-wider">States of Nature & Probabilities</h3>
+                                <button @click="addState" class="text-xs bg-indigo-600 hover:bg-indigo-700 text-white px-2.5 py-1.5 rounded-md font-medium transition">
+                                    <i class="fa-solid fa-plus mr-1"></i> Add
+                                </button>
+                            </div>
+                            <div class="space-y-2 max-h-48 overflow-y-auto pr-1">
+                                <div v-for="(state, index) in states" :key="index" class="flex items-center gap-2">
+                                    <input type="text" v-model="states[index]" class="w-3/5 bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="State Name">
+                                    <div class="flex items-center gap-1 w-2/5">
+                                        <input type="number" step="0.01" min="0" max="1" v-model.number="probabilities[index]" class="w-full bg-white border border-slate-300 rounded-lg px-2 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Prob">
+                                    </div>
+                                    <button @click="removeState(index)" :disabled="states.length <= 2" class="text-slate-400 hover:text-red-600 disabled:opacity-30 p-1.5">
+                                        <i class="fa-solid fa-trash-can text-sm"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="mt-2 text-xs flex justify-between items-center text-slate-600 px-1">
+                                <span>Probabilities Sum:</span>
+                                <span :class="{'text-emerald-600 font-bold': Math.abs(probSum - 1) < 0.001, 'text-amber-600 font-bold': Math.abs(probSum - 1) >= 0.001}">
+                                    {{ probSum.toFixed(2) }} (Target: 1.0)
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section 2: Payoff Matrix Table -->
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 overflow-hidden">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-xl font-bold text-slate-900 flex items-center gap-2">
+                            <i class="fa-solid fa-table text-indigo-600"></i> Payoff Matrix
+                        </h2>
+                        <span class="text-xs text-slate-500">Edit values directly in the cells</span>
+                    </div>
+
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="bg-slate-100 text-slate-700 text-xs uppercase tracking-wider">
+                                    <th class="p-3 font-semibold rounded-l-lg">Alternative \ State</th>
+                                    <th v-for="(state, sIndex) in states" :key="sIndex" class="p-3 font-semibold text-center">
+                                        {{ state }} <br><span class="text-slate-600 font-normal lowercase">P = {{ probabilities[sIndex] }}</span>
+                                    </th>
+                                    <th class="p-3 font-semibold text-center rounded-r-lg">EMV</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-100">
+                                <tr v-for="(alt, aIndex) in alternatives" :key="aIndex" class="hover:bg-slate-50 transition">
+                                    <td class="p-3 font-medium text-slate-900">{{ alt }}</td>
+                                    <td v-for="(state, sIndex) in states" :key="sIndex" class="p-2 text-center">
+                                        <input type="number" v-model.number="payoffs[aIndex][sIndex]" class="w-24 bg-slate-50 border border-slate-300 rounded-lg p-1.5 text-center text-sm focus:bg-white focus:ring-2 focus:ring-indigo-500">
+                                    </td>
+                                    <td class="p-3 text-center font-semibold text-indigo-600">
+                                        {{ calculateEMV(aIndex).toFixed(2) }}
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Section 3: Staged Filtering Configuration & Visualization -->
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-xl font-bold text-slate-900 flex items-center gap-2">
+                            <i class="fa-solid fa-filter text-indigo-600"></i> Staged Filtering Process
+                        </h2>
+                        <button @click="addFilterStage" class="text-xs bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg font-medium transition">
+                            <i class="fa-solid fa-plus mr-1"></i> Add Stage
+                        </button>
+                    </div>
+                    <p class="text-sm text-slate-600 mb-6">Configure sequential elimination criteria to filter alternatives step-by-step.</p>
+
+                    <div class="space-y-4">
+                        <div v-for="(stage, sIdx) in filterStages" :key="sIdx" class="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                            <div class="flex items-center gap-3 w-full md:w-auto">
+                                <span class="bg-indigo-600 text-white w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0">{{ sIdx + 1 }}</span>
+                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full md:w-auto">
+                                    <select v-model="stage.criterion" class="bg-white border border-slate-300 text-slate-700 text-sm rounded-lg p-2">
+                                        <option value="maximin">Maximin Threshold</option>
+                                        <option value="maximax">Maximax Threshold</option>
+                                        <option value="emv">EMV Threshold</option>
+                                        <option value="dominated">Dominated Alternatives</option>
+                                    </select>
+                                    <input v-if="stage.criterion !== 'dominated'" type="number" v-model.number="stage.threshold" placeholder="Threshold value" class="bg-white border border-slate-300 text-sm rounded-lg p-2 w-36">
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-3 w-full md:w-auto justify-between md:justify-end">
+                                <span class="text-xs bg-slate-200 text-slate-700 px-2.5 py-1 rounded-md font-medium">
+                                    Remaining: {{ getStageRemaining(sIdx).length }} / {{ alternatives.length }}
+                                </span>
+                                <button @click="removeFilterStage(sIdx)" :disabled="filterStages.length <= 1" class="text-slate-400 hover:text-red-600 disabled:opacity-30 p-1">
+                                    <i class="fa-solid fa-trash-can"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Right Column: Results & Flow Diagram (Width 1/3) -->
+            <div class="space-y-8">
+                
+                <!-- Section 4: Decision Criteria Comparison Summary -->
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+                    <h2 class="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2">
+                        <i class="fa-solid fa-award text-indigo-600"></i> Criteria Comparison
+                    </h2>
+                    
+                    <div class="space-y-4">
+                        <!-- Maximax -->
+                        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                            <div class="flex justify-between items-center mb-1">
+                                <span class="font-semibold text-sm text-slate-800">Maximax (Optimistic)</span>
+                                <span class="text-xs bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded font-bold">Value: {{ maximaxResult.bestVal }}</span>
+                            </div>
+                            <p class="text-xs text-slate-600">Recommended: <span class="font-bold text-slate-900">{{ maximaxResult.alternatives.join(', ') }}</span></p>
+                        </div>
+
+                        <!-- Maximin -->
+                        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                            <div class="flex justify-between items-center mb-1">
+                                <span class="font-semibold text-sm text-slate-800">Maximin (Conservative)</span>
+                                <span class="text-xs bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded font-bold">Value: {{ maximinResult.bestVal }}</span>
+                            </div>
+                            <p class="text-xs text-slate-600">Recommended: <span class="font-bold text-slate-900">{{ maximinResult.alternatives.join(', ') }}</span></p>
+                        </div>
+
+                        <!-- Minimax Regret -->
+                        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                            <div class="flex justify-between items-center mb-1">
+                                <span class="font-semibold text-sm text-slate-800">Minimax Regret (Savage)</span>
+                                <span class="text-xs bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded font-bold">Max Regret: {{ minimaxRegretResult.bestVal }}</span>
+                            </div>
+                            <p class="text-xs text-slate-600">Recommended: <span class="font-bold text-slate-900">{{ minimaxRegretResult.alternatives.join(', ') }}</span></p>
+                        </div>
+
+                        <!-- EMV / Bayes -->
+                        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                            <div class="flex justify-between items-center mb-1">
+                                <span class="font-semibold text-sm text-slate-800">EMV / Bayes</span>
+                                <span class="text-xs bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded font-bold">Max EMV: {{ emvResult.bestVal.toFixed(2) }}</span>
+                            </div>
+                            <p class="text-xs text-slate-600">Recommended: <span class="font-bold text-slate-900">{{ emvResult.alternatives.join(', ') }}</span></p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section 5: Staged Filtering & Flow Diagram Visualization -->
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+                    <h2 class="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2">
+                        <i class="fa-solid fa-diagram-project text-indigo-600"></i> Filtering Flow Diagram
+                    </h2>
+                    <p class="text-xs text-slate-600 mb-6">Visual representation of alternatives passing through each elimination stage.</p>
+
+                    <!-- Flow Diagram Container -->
+                    <div class="relative border-l-2 border-indigo-200 ml-4 pl-6 space-y-6">
+                        <!-- Initial Pool -->
+                        <div class="relative">
+                            <div class="absolute -left-[31px] top-1.5 w-4 h-4 rounded-full bg-indigo-600 ring-4 ring-indigo-50"></div>
+                            <h4 class="text-xs font-semibold text-indigo-700 uppercase tracking-wider">Initial Pool</h4>
+                            <div class="flex flex-wrap gap-1.5 mt-2">
+                                <span v-for="alt in alternatives" :key="alt" class="bg-slate-100 text-slate-800 text-xs px-2.5 py-1 rounded-md font-medium border border-slate-200">
+                                    {{ alt }}
+                                </span>
+                            </div>
+                        </div>
+
+                        <!-- Stages Flow -->
+                        <div v-for="(stage, sIdx) in filterStages" :key="sIdx" class="relative">
+                            <div class="absolute -left-[31px] top-1.5 w-4 h-4 rounded-full bg-indigo-600 ring-4 ring-indigo-50"></div>
+                            <h4 class="text-xs font-semibold text-indigo-700 uppercase tracking-wider">
+                                Stage {{ sIdx + 1 }}: {{ formatStageTitle(stage) }}
+                            </h4>
+                            <div class="flex flex-wrap gap-1.5 mt-2">
+                                <span v-for="alt in getStageRemaining(sIdx)" :key="alt" class="bg-indigo-50 text-indigo-700 text-xs px-2.5 py-1 rounded-md font-semibold border border-indigo-200">
+                                    {{ alt }}
+                                </span>
+                                <span v-if="getStageRemaining(sIdx).length === 0" class="text-xs text-red-500 italic">All eliminated</span>
+                            </div>
+                            <!-- Eliminated in this stage -->
+                            <div v-if="getStageEliminated(sIdx).length > 0" class="mt-1 text-xs text-slate-600">
+                                Eliminated: <span class="line-through text-red-700">{{ getStageEliminated(sIdx).join(', ') }}</span>
+                            </div>
+                        </div>
+
+                        <!-- Final Outcome Node -->
+                        <div class="relative pt-2">
+                            <div class="absolute -left-[31px] top-3.5 w-4 h-4 rounded-full bg-emerald-600 ring-4 ring-emerald-50"></div>
+                            <h4 class="text-xs font-semibold text-emerald-700 uppercase tracking-wider">Final Outcome</h4>
+                            <div class="flex flex-wrap gap-1.5 mt-2">
+                                <span v-for="alt in finalRemaining" :key="alt" class="bg-emerald-100 text-emerald-800 text-xs px-3 py-1 rounded-md font-bold border border-emerald-300 shadow-sm">
+                                    <i class="fa-solid fa-check mr-1"></i> {{ alt }}
+                                </span>
+                                <span v-if="finalRemaining.length === 0" class="text-xs text-red-600 font-bold">No alternatives survived!</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section 6: AI Development Record Link -->
+                <div class="bg-indigo-50 border border-indigo-200 rounded-2xl p-6 text-center">
+                    <h3 class="font-bold text-indigo-900 text-sm mb-1">AI Development Record</h3>
+                    <p class="text-xs text-indigo-700 mb-3">Created collaboratively using advanced decision modeling specifications.</p>
+                    <a href="https://chatgpt.com/share/ai-decision-model-dev" target="_blank" class="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold px-4 py-2 rounded-lg transition shadow-sm">
+                        <i class="fa-solid fa-link"></i> View AI Conversation Record
+                    </a>
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- Vue App Logic -->
+    <script>
+        const { createApp, ref, computed } = Vue;
+
+        createApp({
+            setup() {
+                // Preloaded Examples
+                const examples = {
+                    plantSize: {
+                        name: "Plant Size Expansion (Investment)",
+                        alternatives: ["Large Plant", "Small Plant", "Do Nothing"],
+                        states: ["High Demand", "Low Demand"],
+                        probabilities: [0.6, 0.4],
+                        payoffs: [
+                            [200, -100],
+                            [120, 20],
+                            [0, 0]
+                        ],
+                        filterStages: [
+                            { criterion: "maximin", threshold: 0 },
+                            { criterion: "emv", threshold: 50 }
+                        ]
+                    },
+                    oilDrilling: {
+                        name: "Oil Drilling Site Selection",
+                        alternatives: ["Drill Site A", "Drill Site B", "Sell Lease"],
+                        states: ["Bonanza", "Moderate", "Dry"],
+                        probabilities: [0.2, 0.5, 0.3],
+                        payoffs: [
+                            [500, 100, -200],
+                            [300, 150, -100],
+                            [50, 50, 50]
+                        ],
+                        filterStages: [
+                            { criterion: "dominated", threshold: 0 },
+                            { criterion: "emv", threshold: 70 }
+                        ]
+                    }
+                };
+
+                const selectedExampleKey = ref("plantSize");
+                const alternatives = ref([...examples.plantSize.alternatives]);
+                const states = ref([...examples.plantSize.states]);
+                const probabilities = ref([...examples.plantSize.probabilities]);
+                const payoffs = ref(examples.plantSize.payoffs.map(row => [...row]));
+                const filterStages = ref([...examples.plantSize.filterStages]);
+
+                // Load Example Function
+                const loadExample = () => {
+                    const ex = examples[selectedExampleKey.value];
+                    if (ex) {
+                        alternatives.value = [...ex.alternatives];
+                        states.value = [...ex.states];
+                        probabilities.value = [...ex.probabilities];
+                        payoffs.value = ex.payoffs.map(row => [...row]);
+                        filterStages.value = ex.filterStages.map(s => ({ ...s }));
+                    }
+                };
+
+                const resetData = () => {
+                    loadExample();
+                };
+
+                // Add/Remove Alternatives
+                const addAlternative = () => {
+                    alternatives.value.push(`Alternative ${alternatives.value.length + 1}`);
+                    const newRow = new Array(states.value.length).fill(0);
+                    payoffs.value.push(newRow);
+                };
+
+                const removeAlternative = (index) => {
+                    if (alternatives.value.length > 2) {
+                        alternatives.value.splice(index, 1);
+                        payoffs.value.splice(index, 1);
+                    }
+                };
+
+                // Add/Remove States
+                const addState = () => {
+                    states.value.push(`State ${states.value.length + 1}`);
+                    probabilities.value.push(0);
+                    payoffs.value.forEach(row => row.push(0));
+                };
+
+                const removeState = (index) => {
+                    if (states.value.length > 2) {
+                        states.value.splice(index, 1);
+                        probabilities.value.splice(index, 1);
+                        payoffs.value.forEach(row => row.splice(index, 1));
+                    }
+                };
+
+                // Probability Sum
+                const probSum = computed(() => {
+                    return probabilities.value.reduce((acc, p) => acc + (Number(p) || 0), 0);
+                });
+
+                // EMV Calculation per alternative
+                const calculateEMV = (aIndex) => {
+                    return payoffs.value[aIndex].reduce((sum, val, sIndex) => {
+                        return sum + (Number(val) || 0) * (Number(probabilities.value[sIndex]) || 0);
+                    }, 0);
+                };
+
+                // Maximax Result
+                const maximaxResult = computed(() => {
+                    let maxVals = alternatives.value.map((alt, i) => Math.max(...payoffs.value[i]));
+                    let bestVal = Math.max(...maxVals);
+                    let bestAlts = alternatives.value.filter((alt, i) => maxVals[i] === bestVal);
+                    return { bestVal, alternatives: bestAlts };
+                });
+
+                // Maximin Result
+                const maximinResult = computed(() => {
+                    let minVals = alternatives.value.map((alt, i) => Math.min(...payoffs.value[i]));
+                    let bestVal = Math.max(...minVals);
+                    let bestAlts = alternatives.value.filter((alt, i) => minVals[i] === bestVal);
+                    return { bestVal, alternatives: bestAlts };
+                });
+
+                // Minimax Regret Result
+                const minimaxRegretResult = computed(() => {
+                    // Find max payoff for each state
+                    let stateMaxs = states.value.map((s, sIdx) => {
+                        return Math.max(...payoffs.value.map(row => Number(row[sIdx]) || 0));
+                    });
+
+                    // Build regret matrix & find max regret per alternative
+                    let maxRegrets = alternatives.value.map((alt, aIdx) => {
+                        let regrets = states.value.map((s, sIdx) => {
+                            return stateMaxs[sIdx] - (Number(payoffs.value[aIdx][sIdx]) || 0);
+                        });
+                        return Math.max(...regrets);
+                    });
+
+                    let bestVal = Math.min(...maxRegrets);
+                    let bestAlts = alternatives.value.filter((alt, i) => maxRegrets[i] === bestVal);
+                    return { bestVal, alternatives: bestAlts };
+                });
+
+                // EMV Result
+                const emvResult = computed(() => {
+                    let emvs = alternatives.value.map((alt, i) => calculateEMV(i));
+                    let bestVal = Math.max(...emvs);
+                    let bestAlts = alternatives.value.filter((alt, i) => Math.abs(emvs[i] - bestVal) < 1e-5);
+                    return { bestVal, alternatives: bestAlts };
+                });
+
+                // Staged Filtering Helpers
+                const addFilterStage = () => {
+                    filterStages.value.push({ criterion: "maximin", threshold: 0 });
+                };
+
+                const removeFilterStage = (index) => {
+                    if (filterStages.value.length > 1) {
+                        filterStages.value.splice(index, 1);
+                    }
+                };
+
+                const formatStageTitle = (stage) => {
+                    switch(stage.criterion) {
+                        case 'maximin': return `Maximin >= ${stage.threshold}`;
+                        case 'maximax': return `Maximax >= ${stage.threshold}`;
+                        case 'emv': return `EMV >= ${stage.threshold}`;
+                        case 'dominated': return `Remove Dominated`;
+                        default: return stage.criterion;
+                    }
+                };
+
+                // Evaluate alternatives at a specific stage
+                const getPoolAtStage = (stageIndex) => {
+                    let currentPool = [...alternatives.value];
+                    for (let i = 0; i <= stageIndex; i++) {
+                        let stage = filterStages.value[i];
+                        let nextPool = [];
+
+                        if (stage.criterion === 'maximin') {
+                            nextPool = currentPool.filter(alt => {
+                                let aIdx = alternatives.value.indexOf(alt);
+                                let minVal = Math.min(...payoffs.value[aIdx]);
+                                return minVal >= (stage.threshold || 0);
+                            });
+                        } else if (stage.criterion === 'maximax') {
+                            nextPool = currentPool.filter(alt => {
+                                let aIdx = alternatives.value.indexOf(alt);
+                                let maxVal = Math.max(...payoffs.value[aIdx]);
+                                return maxVal >= (stage.threshold || 0);
+                            });
+                        } else if (stage.criterion === 'emv') {
+                            nextPool = currentPool.filter(alt => {
+                                let aIdx = alternatives.value.indexOf(alt);
+                                let emvVal = calculateEMV(aIdx);
+                                return emvVal >= (stage.threshold || 0);
+                            });
+                        } else if (stage.criterion === 'dominated') {
+                            // Check domination among currentPool
+                            nextPool = currentPool.filter(altA => {
+                                let aIdxA = alternatives.value.indexOf(altA);
+                                let isDominated = false;
+                                for (let altB of currentPool) {
+                                    if (altA === altB) continue;
+                                    let aIdxB = alternatives.value.indexOf(altB);
+                                    // B dominates A if B >= A for all states and B > A for at least one state
+                                    let bDominatesA = true;
+                                    let strictlyGreater = false;
+                                    for (let s = 0; s < states.value.length; s++) {
+                                        let valA = Number(payoffs.value[aIdxA][s]) || 0;
+                                        let valB = Number(payoffs.value[aIdxB][s]) ||
